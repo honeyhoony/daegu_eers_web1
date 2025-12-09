@@ -10,5 +10,5 @@ certifi
 urllib3
 typing-extensions
 extra-streamlit-components
-pg8000
+psycopg2
 

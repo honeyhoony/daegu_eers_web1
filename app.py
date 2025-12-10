@@ -57,21 +57,7 @@ DATABASE_URL = _cfg("DATABASE_URL", "")
 
 
 
-#--------------test-----------------
-import os
-import sqlalchemy
 
-print("DEBUG: SUPABASE URL =", os.environ.get("SUPABASE_DATABASE_URL"))
-
-try:
-    engine = sqlalchemy.create_engine(os.environ["SUPABASE_DATABASE_URL"])
-    conn = engine.connect()
-    print("DEBUG: DB connected successfully!")
-    conn.close()
-except Exception as e:
-    print("DEBUG: DB connection failed:", e)
-
-#---------------------------------------
 
 
 

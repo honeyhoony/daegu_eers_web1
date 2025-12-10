@@ -91,8 +91,11 @@ def get_engine_and_session(db_url: str):
         raise ValueError("DB URL is not set.")
 
     # psycopg2 드라이버 사용
-    if db_url.startswith("postgresql://"):
-        db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    # 수정안 (드라이버 자동 선택)
+    if db_url.startswith("postgresql://") and "://" in db_url:
+        # psycopg2-binary 설치가 안된 환경에서도 작동하도록 pg8000 허용
+        if "+psycopg2" not in db_url:
+            db_url = db_url.replace("postgresql://", "postgresql+pg8000://", 1)
 
     # Supabase URL에 이미 ?sslmode=require 가 붙어 있으면 그대로 사용
     # 따로 connect_args 안 쓰고 URL만 넘김

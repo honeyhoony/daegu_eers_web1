@@ -116,39 +116,7 @@ except Exception as e:
     st.error("데이터베이스 초기화 오류 발생")
 
 
-else:
-    logger.warning("SUPABASE_DATABASE_URL not found. Running without DB connection.")
-    engine = None
-    SessionLocal = None
 
-
-
-    # 🛑 Notice, MailRecipient, MailHistory 클래스를 이 블록 내에서 정의해야 합니다.
-    class Notice: pass
-    class MailRecipient: pass
-    class MailHistory: pass
-    
-    # 더미 객체 정의
-    engine = None
-    class Base:
-        @staticmethod
-        def metadata():
-            class Meta:
-                @staticmethod
-                def create_all(eng): pass
-            return Meta()
-    def SessionLocal(): return None
-    
-    # ... (collect_data, mailer 더미 함수 정의는 기존과 동일하게 유지)
-    def fetch_data_for_stage(*args): pass
-    STAGES_CONFIG = {"G2B": {"name": "G2B", "code": "g2b"}, "KAPT": {"name": "K-APT", "code": "kapt"}}
-    def fetch_kapt_basic_info(code): return {}
-    def fetch_kapt_maintenance_history(code): return []
-    def fetch_dlvr_header(req_no): return {}
-    def fetch_dlvr_detail(req_no): return []
-    def send_mail(**kwargs): return True
-    def build_subject(*args): return "테스트 제목"
-    def build_body_html(*args): return "<html><body>테스트 본문</body></html>", "첨부.html", "첨부 내용", "미리보기"
 
 
 # =========================================================

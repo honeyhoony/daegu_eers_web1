@@ -119,20 +119,31 @@ try:
     if SUPABASE_DATABASE_URL:
         logger.info("Connecting to Supabase PostgreSQL (cached)...")
 
-        # ✅ 캐시된 엔진/세션팩토리 사용 (Streamlit rerun 시에도 재사용)
         @st.cache_resource
         def get_engine_cached():
             from database import get_engine_and_session
             return get_engine_and_session(SUPABASE_DATABASE_URL)
 
-        _engine, _SessionLocal = get_engine_cached()
+        # ✅ 캐시 Warm-up (안전한 예외 처리 포함)
+        if "db_warmed_up" not in st.session_state:
+            st.info("Warming up DB connection...")
+            try:
+                _engine, _SessionLocal = get_engine_cached()
+                st.session_state.db_warmed_up = True
+                logger.info("✅ Database connection warmed up successfully.")
+            except Exception as e:
+                logger.error(f"❌ DB warm-up failed: {e}")
+                _engine, _SessionLocal = None, None
+                st.error("⚠️ Database connection failed. Running in limited mode.")
 
-        # 전역 변수로 바인딩
+        # ✅ 전역 바인딩 (안정적으로)
         engine = _engine
         SessionLocal = _SessionLocal
 
-        logger.info("Database connection successful and metadata loaded (cached).")
-
+        if engine:
+            logger.info("Database connection successful and metadata loaded (cached).")
+        else:
+            logger.warning("Database engine not initialized due to connection failure.")
     else:
         logger.warning("SUPABASE_DATABASE_URL not found. Running with dummy database logic.")
 
@@ -663,7 +674,7 @@ def init_session_state():
 
 def get_db_session():
     # PostgreSQL은 create_all을 여러번 호출해도 문제 없음
-    Base.metadata.create_all(engine)
+    #Base.metadata.create_all(engine)
     return SessionLocal()
 
 

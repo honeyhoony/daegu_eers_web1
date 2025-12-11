@@ -89,70 +89,66 @@ else:
 
 SIX_MONTHS = timedelta(days=30 * 6)
 
-    import streamlit as st
-    import logging
-    from config import SUPABASE_DATABASE_URL
+import streamlit as st
+import logging
+from config import SUPABASE_DATABASE_URL
 
-    logger = logging.getLogger(__name__)
-
-
-    # =========================================================
-    # 1) DB 엔진 캐시 함수 (항상 최상단에서 정의)
-    # =========================================================
-    @st.cache_resource
-    def get_engine_cached():
-        from database import get_engine_and_session
-        return get_engine_and_session(SUPABASE_DATABASE_URL)
+logger = logging.getLogger(__name__)
 
 
+# =========================================================
+# 1) DB 엔진 캐시 함수 (항상 최상단에서 정의)
+# =========================================================
+@st.cache_resource
+def get_engine_cached():
+    from database import get_engine_and_session
+    return get_engine_and_session(SUPABASE_DATABASE_URL)
 
-    # =========================================================
-    # 2) Warm-up + 항상 안전한 엔진 초기화
-    # =========================================================
+
+# =========================================================
+# 2) Warm-up + 항상 안전한 엔진 초기화
+# =========================================================
+engine = None
+SessionLocal = None
+
+if SUPABASE_DATABASE_URL:
+
+    logger.info("Connecting to Supabase PostgreSQL (cached)...")
+
+        # ---------- Warm-up: 최초 1회만 실행 ----------
+    if "db_warmed_up" not in st.session_state:
+        try:
+            st.info("Warming up DB connection...")
+            get_engine_cached()   # warm-up only (no binding yet)
+            st.session_state.db_warmed_up = True
+            logger.info("✅ Database connection warmed up successfully.")
+        except Exception as e:
+            logger.warning(f"Warm-up failed: {e}")
+            st.error("DB 연결 과정에서 오류가 발생했습니다.")
+            st.session_state.db_warmed_up = False
+
+        # ---------- Main 실행: 항상 캐시된 엔진을 불러옴 ----------
+    try:
+        _engine, _SessionLocal = get_engine_cached()
+
+        engine = _engine
+        SessionLocal = _SessionLocal
+
+        logger.info("Database connection successful and metadata loaded (cached).")
+
+    except Exception as e:
+        engine = None
+        SessionLocal = None
+        logger.warning(f"Database engine not initialized due to connection issue: {e}")
+        st.error("데이터베이스 기능 오류 발생. 재시도하세요.")
+
+else:
+    logger.warning("SUPABASE_DATABASE_URL not found. Running without DB connection.")
     engine = None
     SessionLocal = None
 
-    if SUPABASE_DATABASE_URL:
-
-        logger.info("Connecting to Supabase PostgreSQL (cached)...")
-
-        # ---------- Warm-up: 최초 1회만 실행 ----------
-        if "db_warmed_up" not in st.session_state:
-            try:
-                st.info("Warming up DB connection...")
-                get_engine_cached()   # warm-up only (no binding yet)
-                st.session_state.db_warmed_up = True
-                logger.info("✅ Database connection warmed up successfully.")
-            except Exception as e:
-                logger.warning(f"Warm-up failed: {e}")
-                st.error("DB 연결 과정에서 오류가 발생했습니다.")
-                st.session_state.db_warmed_up = False
-
-        # ---------- Main 실행: 항상 캐시된 엔진을 불러옴 ----------
-        try:
-            _engine, _SessionLocal = get_engine_cached()
-
-            engine = _engine
-            SessionLocal = _SessionLocal
-
-            logger.info("Database connection successful and metadata loaded (cached).")
-
-        except Exception as e:
-            engine = None
-            SessionLocal = None
-            logger.warning(f"Database engine not initialized due to connection issue: {e}")
-            st.error("데이터베이스 기능 오류 발생. 재시도하세요.")
-
-    else:
-        logger.warning("SUPABASE_DATABASE_URL not found. Running without DB connection.")
-        engine = None
-        SessionLocal = None
 
 
-except ImportError as e:
-    # 필수 모듈 로드 실패 시, Streamlit이 실행되도록 더미 정의를 유지합니다.
-    st.warning(f"경고: 필수 모듈 (database, collect_data, mailer) 로드 실패: {e}. 더미 함수로 대체됩니다.")
-    
     # 🛑 Notice, MailRecipient, MailHistory 클래스를 이 블록 내에서 정의해야 합니다.
     class Notice: pass
     class MailRecipient: pass

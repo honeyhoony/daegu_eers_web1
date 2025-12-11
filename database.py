@@ -94,31 +94,33 @@ def get_engine_and_session(database_url: str):
     if not database_url:
         raise ValueError("DATABASE_URL is missing")
 
-    # ✅ 1. 실제 URL을 로그에 남겨서 Fly 로그에서도 확인 가능
+    # ====================================================
+    # 1️⃣ URL 정규화 처리 (pgbouncer=true 완전 제거)
+    # ====================================================
     print(">>> ORIGINAL DATABASE URL:", database_url)
+    cleaned_url = re.sub(r"[?&]pgbouncer=true", "", database_url)
+    print(">>> CLEANED DATABASE URL:", cleaned_url)
 
-    # ✅ 2. '?pgbouncer=true' 또는 '&pgbouncer=true'를 모두 제거
-    database_url = re.sub(r"[?&]pgbouncer=true", "", database_url)
-    print(">>> CLEANED DATABASE URL:", database_url)
-
-    # ✅ 3. 연결 풀 안정화 설정
+    # ====================================================
+    # 2️⃣ SQLAlchemy 엔진 생성 (풀 제한)
+    # ====================================================
     engine = create_engine(
-        database_url,
+        cleaned_url,
         pool_size=5,
         max_overflow=0,
         pool_pre_ping=True
     )
 
-    # ✅ 4. 메타데이터 생성
+    # ====================================================
+    # 3️⃣ 테이블 생성 (최초 1회만)
+    # ====================================================
     Base.metadata.create_all(engine)
 
-    # ✅ 5. 세션팩토리 반환
+    # ====================================================
+    # 4️⃣ 세션팩토리 반환
+    # ====================================================
     SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     return engine, SessionLocal
-
-
-
-
 
 
 

@@ -116,6 +116,12 @@ try:
     )
     from mailer import send_mail, build_subject, build_body_html, build_attachment_html
 
+    # ======================================================
+    # 1. DB 연결 캐시 및 초기화
+    # ======================================================
+
+    _engine, _SessionLocal = None, None  # ✅ 먼저 안전하게 선언
+
     if SUPABASE_DATABASE_URL:
         logger.info("Connecting to Supabase PostgreSQL (cached)...")
 
@@ -133,10 +139,10 @@ try:
                 logger.info("✅ Database connection warmed up successfully.")
             except Exception as e:
                 logger.error(f"❌ DB warm-up failed: {e}")
-                _engine, _SessionLocal = None, None
                 st.error("⚠️ Database connection failed. Running in limited mode.")
+                _engine, _SessionLocal = None, None  # ✅ 안전한 초기화
 
-        # ✅ 전역 바인딩 (안정적으로)
+        # ✅ 전역 바인딩 (예외 없이 항상 정의)
         engine = _engine
         SessionLocal = _SessionLocal
 
@@ -146,7 +152,7 @@ try:
             logger.warning("Database engine not initialized due to connection failure.")
     else:
         logger.warning("SUPABASE_DATABASE_URL not found. Running with dummy database logic.")
-
+        engine, SessionLocal = None, None  # ✅ 명시적으로 선언
 
 except ImportError as e:
     # 필수 모듈 로드 실패 시, Streamlit이 실행되도록 더미 정의를 유지합니다.

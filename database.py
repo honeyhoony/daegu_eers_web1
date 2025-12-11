@@ -90,20 +90,16 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 Base = declarative_base()
 
 def get_engine_and_session(database_url: str):
-    """Supabase PostgreSQL 엔진과 세션팩토리 생성"""
+    """Supabase PostgreSQL 엔진 및 세션팩토리 생성"""
     if not database_url:
         raise ValueError("DATABASE_URL is missing")
 
-    # ====================================================
-    # 1️⃣ URL 정규화 처리 (pgbouncer=true 완전 제거)
-    # ====================================================
+    # ✅ (1) URL에서 pgbouncer 관련 매개변수 완전 제거
     print(">>> ORIGINAL DATABASE URL:", database_url)
     cleaned_url = re.sub(r"[?&]pgbouncer=true", "", database_url)
     print(">>> CLEANED DATABASE URL:", cleaned_url)
 
-    # ====================================================
-    # 2️⃣ SQLAlchemy 엔진 생성 (풀 제한)
-    # ====================================================
+    # ✅ (2) 연결 풀 크기 제한
     engine = create_engine(
         cleaned_url,
         pool_size=5,
@@ -111,17 +107,9 @@ def get_engine_and_session(database_url: str):
         pool_pre_ping=True
     )
 
-    # ====================================================
-    # 3️⃣ 테이블 생성 (최초 1회만)
-    # ====================================================
     Base.metadata.create_all(engine)
-
-    # ====================================================
-    # 4️⃣ 세션팩토리 반환
-    # ====================================================
     SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     return engine, SessionLocal
-
 
 
 # ─────────────────────────────────────────
@@ -193,5 +181,5 @@ def _kea_cache_set(session, model: str, flag: int):
 import os
 
 db_url = os.getenv("SUPABASE_DATABASE_URL")
-engine, SessionLocal = get_engine_and_session(db_url)
+
 

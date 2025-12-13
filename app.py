@@ -19,11 +19,9 @@ import random
 import string
 import extra_streamlit_components as stx
 from pandas.tseries.offsets import BusinessDay
+from mailer import send_verification_email
 import ssl
 import logging
-from mailer import send_verification_email
-
-
 from database import (
     Base,
     Notice,
@@ -282,67 +280,6 @@ def logout():
     st.toast("로그아웃되었습니다.", icon="👋")
     st.rerun()
 
-<<<<<<< HEAD
-def send_verification_email(to_email, code):
-    print("\n==============================")
-    print("📧 인증코드 이메일 발송")
-    print(f"👉 수신자: {to_email}")
-    print(f"🔐 인증코드: {code}")
-    print("==============================\n")
-
-    msg = EmailMessage()
-
-    msg.set_content(f"""
-[EERS 시스템 로그인 인증]
-
-인증코드: {code}
-
-위 코드를 시스템에 입력하여 로그인을 완료해주세요.
-""", subtype="plain")
-
-    msg.add_alternative(f"""
-<html>
-<body>
-    <h3>[EERS 시스템 로그인 인증]</h3>
-    <p>인증코드:</p>
-    <div style="font-size:24px;font-weight:bold;">{code}</div>
-</body>
-</html>
-""", subtype="html")
-
-    msg["Subject"] = "[EERS] 로그인 인증코드 안내"
-    msg["From"] = f"{MAIL_FROM_NAME} <{MAIL_FROM}>"
-    msg["To"] = to_email
-
-    try:
-        context = ssl.create_default_context()
-
-        with smtplib.SMTP_SSL(
-            MAIL_SMTP_HOST,
-            int(MAIL_SMTP_PORT),
-            context=context,
-            timeout=10
-        ) as server:
-            server.login(MAIL_USER, MAIL_PASS)
-            server.send_message(msg)
-
-        print("✅ 메일 발송 성공")
-        return True
-
-    except Exception as e:
-        import traceback
-        print("=== SMTP ERROR START ===")
-        print(e)
-        traceback.print_exc()
-        print("=== SMTP ERROR END ===")
-        st.error("메일 발송 실패! (SMTP 설정 오류)")
-        return False
-=======
-
-
->>>>>>> 356a4cc (fix: SMTP 메일 발송 로직 수정 및 설정 반영)
-
-
 
 
 
@@ -416,6 +353,18 @@ def render_auth_ui():
         submitted = st.button("인증코드 발송", type="primary", use_container_width=True, key="sidebar_send_code")
 
         if submitted:
+
+            # ✅ [1] 재발송 제한 가드 (여기!!)
+            now = datetime.now()
+            last = st.session_state.get("last_mail_attempt")
+
+            if last and (now - last).seconds < 30:
+                remain = 30 - (now - last).seconds
+                st.warning(f"⏳ {remain}초 후 다시 시도해주세요.")
+                return
+
+            st.session_state["last_mail_attempt"] = now
+
             if not email_id:
                 st.error("❌ 이메일을 입력하세요.")
             else:
@@ -426,12 +375,20 @@ def render_auth_ui():
                 st.session_state["code_timestamp"] = datetime.now()
 
                 with st.spinner("메일 발송 중..."):
-                    if send_verification_email(full_email, code):
-                        st.toast("📧 인증코드 발송 완료! 인증코드 입력 단계로 이동합니다.")
-                        st.session_state["auth_stage"] = "verify_code"
-                        st.rerun() # 상태 변경 후 UI 갱신
-                    else:
-                        st.error("메일 발송 실패! (SMTP 설정 및 로그 확인)")
+                    ok = send_verification_email(full_email, code)
+
+                if ok:
+                    st.session_state["generated_code"] = code
+                    st.session_state["target_email"] = full_email
+                    st.session_state["code_timestamp"] = datetime.now()
+                    st.session_state["auth_stage"] = "verify_code"
+                    st.toast("📧 인증코드 발송 완료!")
+                    st.rerun()
+                else:
+                    st.session_state.pop("generated_code", None)
+                    st.session_state.pop("code_timestamp", None)
+                    st.error("메일 발송 실패 (현재 환경에서 SMTP 전송이 제한됨)")
+
         return
         
 
@@ -603,7 +560,9 @@ def init_session_state():
     ss.setdefault("is_updating", False)
     ss.setdefault("show_login_dialog", False) # 로그인 다이얼로그 상태
     st.session_state.setdefault("show_login_form", False) 
-    st.session_state.setdefault("auth_stage", "input_email") # 인증 단계 초기화
+    if "auth_stage" not in st.session_state:
+        st.session_state["auth_stage"] = "input_email"
+
 
 
 
@@ -2720,21 +2679,6 @@ def eers_app():
             pass
 
 if __name__ == "__main__":
-<<<<<<< HEAD
     if engine and not inspect(engine).has_table("notices"):
         Base.metadata.create_all(engine)
     eers_app()
-=======
-    if 'engine' in globals() and engine is not None:
-        try:
-            insp = inspect(engine)
-            if not insp.has_table("notices"):
-                Base.metadata.create_all(engine)
-        except Exception:
-            pass
-
-    eers_app()
-
-
-    
->>>>>>> 356a4cc (fix: SMTP 메일 발송 로직 수정 및 설정 반영)

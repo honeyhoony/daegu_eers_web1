@@ -9,7 +9,7 @@ primary_region = "nrt"
 [http_service]
   internal_port = 8501
   force_https = true
-  auto_stop_machines = "stop"
+
   auto_start_machines = false
   min_machines_running = 1
   processes = ["app"]

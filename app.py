@@ -306,8 +306,6 @@ def logout():
     st.rerun()
 
 def send_verification_email(to_email, code):
-
-    # 🔥 콘솔 출력 (디버그용)
     print("\n==============================")
     print("📧 인증코드 이메일 발송")
     print(f"👉 수신자: {to_email}")
@@ -315,49 +313,56 @@ def send_verification_email(to_email, code):
     print("==============================\n")
 
     msg = EmailMessage()
-    
-    plain_content = f"""
-    [EERS 시스템 로그인 인증]
-    
-    인증코드: {code}
-    
-    위 코드를 시스템에 입력하여 로그인을 완료해주세요.
-    """
-    msg.set_content(plain_content, subtype="plain") 
-    
-    html_content = f"""
-    <html>
-    <body style="font-family: Arial, sans-serif; line-height: 1.6;">
-        <div style="border: 1px solid #ddd; padding: 20px; border-radius: 8px; background-color: #f9f9f9;">
-            <h3 style="color: #333;">[EERS 시스템 로그인 인증]</h3>
-            <p>귀하의 로그인 인증 코드는 다음과 같습니다:</p>
-            <div style="background-color: #ffe4e1; color: #d9534f; padding: 10px; border-radius: 4px; font-size: 18px; font-weight: bold; text-align: center; margin: 15px 0;">
-                {code}
-            </div>
-            <p>위 코드를 시스템에 입력하여 로그인을 완료해주세요.</p>
-        </div>
-    </body>
-    </html>
-    """
-    msg.add_alternative(html_content, subtype="html")
+
+    msg.set_content(f"""
+[EERS 시스템 로그인 인증]
+
+인증코드: {code}
+
+위 코드를 시스템에 입력하여 로그인을 완료해주세요.
+""", subtype="plain")
+
+    msg.add_alternative(f"""
+<html>
+<body>
+    <h3>[EERS 시스템 로그인 인증]</h3>
+    <p>인증코드:</p>
+    <div style="font-size:24px;font-weight:bold;">{code}</div>
+</body>
+</html>
+""", subtype="html")
 
     msg["Subject"] = "[EERS] 로그인 인증코드 안내"
-    msg["From"] = MAIL_FROM
+    msg["From"] = f"{MAIL_FROM_NAME} <{MAIL_FROM}>"
     msg["To"] = to_email
 
-    context = ssl.create_default_context()
-    
     try:
-        with smtplib.SMTP(MAIL_SMTP_HOST, MAIL_SMTP_PORT, timeout=10) as server:
-            server.ehlo()
-            server.starttls(context=context)
-            server.ehlo()
+        context = ssl.create_default_context()
+
+        with smtplib.SMTP_SSL(
+            MAIL_SMTP_HOST,
+            int(MAIL_SMTP_PORT),
+            context=context,
+            timeout=10
+        ) as server:
             server.login(MAIL_USER, MAIL_PASS)
             server.send_message(msg)
+
+        print("✅ 메일 발송 성공")
         return True
+
     except Exception as e:
-        print(f"!!! 메일 발송 실패: {e}")
+        import traceback
+        print("=== SMTP ERROR START ===")
+        print(e)
+        traceback.print_exc()
+        print("=== SMTP ERROR END ===")
+        st.error("메일 발송 실패! (SMTP 설정 오류)")
         return False
+
+
+
+
 
 # =========================================================
 # 재구성된 로그인/인증 UI 렌더링 함수 (핵심)

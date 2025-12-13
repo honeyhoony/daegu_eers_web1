@@ -21,14 +21,34 @@ import extra_streamlit_components as stx
 from pandas.tseries.offsets import BusinessDay
 import ssl
 import logging
+from mailer import send_verification_email
+
+
 from database import (
     Base,
     Notice,
     MailRecipient,
     MailHistory,
-    get_engine_and_session,
     get_db_session
 )
+from database import engine
+
+from database import (
+     Notice, 
+     MailRecipient, 
+     MailHistory, 
+     Base, 
+     engine as db_module_engine, # database.py의 초기 None 엔진
+     SessionLocal as db_module_session_local # database.py의 초기 None 세션
+)
+# collect_data, mailer 임포트는 유지합니다.
+from collect_data import (
+    fetch_data_for_stage, STAGES_CONFIG, is_relevant_text,
+    resolve_address_from_bjd, fetch_kapt_basic_info, fetch_kapt_maintenance_history,
+    _as_text, _to_int as _to_int_collect, _extract_school_name, _assign_office_by_school_name
+    )
+from mailer import send_mail, build_subject, build_body_html, build_attachment_html
+
 
 # =========================================================
 # 로깅 설정
@@ -86,42 +106,9 @@ MIN_SYNC_DATE = (
 
 SIX_MONTHS = timedelta(days=180)
 
-# =========================================================
-# DB 엔진 캐싱
-# =========================================================
-@st.cache_resource
-def get_engine_cached():
-    from database import get_engine_and_session
-    return get_engine_and_session(SUPABASE_DATABASE_URL)
 
-engine = None
-SessionLocal = None
 
-logger.info("Connecting to Supabase PostgreSQL (cached)...")
 
-# ---------- Warm-up: 최초 1회 ----------
-if "db_warmed_up" not in st.session_state:
-    try:
-        st.info("Warming up DB connection...")
-        get_engine_cached()
-        st.session_state.db_warmed_up = True
-        logger.info("DB warm-up success")
-    except Exception as e:
-        logger.error(f"Warm-up failed: {e}")
-        st.error("DB 연결 오류. 다시 시도하세요.")
-        st.session_state.db_warmed_up = False
-
-# ---------- 항상 엔진을 가져옴 ----------
-try:
-    _engine, _SessionLocal = get_engine_cached()
-    engine = _engine
-    SessionLocal = _SessionLocal
-    logger.info("DB connection OK (cached)")
-except Exception as e:
-    logger.error(f"DB init failure: {e}")
-    engine = None
-    SessionLocal = None
-    st.error("데이터베이스 초기화 오류 발생")
 
 
 
@@ -261,17 +248,7 @@ def _to_int_local(val):
     except Exception:
         return 0
 
-# DB PRAGMA 설정 (SQLite) - 실제 DB 모듈이 있다면 활성화
-if engine and "sqlite" in str(engine.url): # <--- PostgreSQL을 위해 조건 변경 또는 삭제
-    @event.listens_for(engine, "connect")
-    def _set_sqlite_pragma(dbapi_conn, connection_record):
-        # ... (PRAGMA 설정 코드 삭제 또는 주석 처리)
-        cursor = dbapi_conn.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL;")
-        cursor.execute("PRAGMA synchronous=NORMAL;")
-        cursor.execute("PRAGMA busy_timeout=5000;")
-        cursor.execute("PRAGMA foreign_keys=ON;")
-        cursor.close()
+
 # =========================================================
 # 로그인 & 인증 관련 함수 (수정)
 # =========================================================
@@ -305,6 +282,7 @@ def logout():
     st.toast("로그아웃되었습니다.", icon="👋")
     st.rerun()
 
+<<<<<<< HEAD
 def send_verification_email(to_email, code):
     print("\n==============================")
     print("📧 인증코드 이메일 발송")
@@ -359,6 +337,10 @@ def send_verification_email(to_email, code):
         print("=== SMTP ERROR END ===")
         st.error("메일 발송 실패! (SMTP 설정 오류)")
         return False
+=======
+
+
+>>>>>>> 356a4cc (fix: SMTP 메일 발송 로직 수정 및 설정 반영)
 
 
 
@@ -624,10 +606,7 @@ def init_session_state():
     st.session_state.setdefault("auth_stage", "input_email") # 인증 단계 초기화
 
 
-def get_db_session():
-    # PostgreSQL은 create_all을 여러번 호출해도 문제 없음
-    #Base.metadata.create_all(engine)
-    return SessionLocal()
+
 
 
 
@@ -779,14 +758,19 @@ def load_data_from_db(
     df = pd.DataFrame(data)
     session.close()
     return df, total_items
-
 def search_data():
-    if engine and not inspect(engine).has_table("notices"):
-        Base.metadata.create_all(engine)
 
-    # 💡 [수정] 페이지 초기화
+    # 안전한 엔진 체크
+    if 'engine' in globals() and engine is not None:
+        try:
+            insp = inspect(engine)
+            if not insp.has_table("notices"):
+                Base.metadata.create_all(engine)
+        except Exception:
+            pass
+
     st.session_state["page"] = 1
-    
+
     try:
         df, total_items = load_data_from_db(
             st.session_state["office"], st.session_state["source"],
@@ -807,9 +791,7 @@ def search_data():
         else 1
     )
     st.session_state.total_pages = total_pages
-    st.session_state["data_initialized"] = True # 데이터 조회 완료 표시
-    # st.rerun() # 불필요한 reru 방지
-    
+    st.session_state["data_initialized"] = True
 
 # =========================================================
 # 3. 상세 보기 / 즐겨찾기 (수정)
@@ -848,10 +830,17 @@ def toggle_favorite(notice_id: int):
     finally:
         session.close()
 
-# 💡 search_data 함수를 비동기 호출 없이 세션 상태만 업데이트하는 헬퍼 함수
 def search_data_no_rerun():
-    if engine and not inspect(engine).has_table("notices"):
-        Base.metadata.create_all(engine)
+
+    # 안전한 엔진 체크
+    if 'engine' in globals() and engine is not None:
+        try:
+            insp = inspect(engine)
+            if not insp.has_table("notices"):
+                Base.metadata.create_all(engine)
+        except Exception:
+            pass
+
     try:
         df, total_items = load_data_from_db(
             st.session_state["office"], st.session_state["source"],
@@ -864,6 +853,9 @@ def search_data_no_rerun():
         st.session_state.total_pages = max(1, math.ceil(total_items / ITEMS_PER_PAGE))
     except Exception as e:
         print(f"데이터 조회 중 오류 (no rerun): {e}")
+
+
+
 
 
 def _ensure_phone_inline(notice_id: int):
@@ -2728,6 +2720,21 @@ def eers_app():
             pass
 
 if __name__ == "__main__":
+<<<<<<< HEAD
     if engine and not inspect(engine).has_table("notices"):
         Base.metadata.create_all(engine)
     eers_app()
+=======
+    if 'engine' in globals() and engine is not None:
+        try:
+            insp = inspect(engine)
+            if not insp.has_table("notices"):
+                Base.metadata.create_all(engine)
+        except Exception:
+            pass
+
+    eers_app()
+
+
+    
+>>>>>>> 356a4cc (fix: SMTP 메일 발송 로직 수정 및 설정 반영)

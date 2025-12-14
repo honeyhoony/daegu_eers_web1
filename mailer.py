@@ -137,6 +137,17 @@ def build_body_html(office: str, period: Tuple[date, date], items_period: List[D
 """
     preview = f"[{office}] {period_txt} / {len(items_period)}건"
     return html, attach_name, attach_html, preview
+# =======================================================
+# Streamlit 에러 안전 호출 (CLI 환경 대응)
+# =======================================================
+def _safe_st_error(msg: str):
+    """Streamlit UI가 없는 환경에서도 안전하게 에러 표시"""
+    try:
+        import streamlit as st
+        st.error(msg)
+    except Exception:
+        import logging
+        logging.error(msg)
 
 # =======================================================
 # SendGrid API 메일 발송
@@ -150,7 +161,7 @@ def send_mail_sendgrid(
 ):
     """SendGrid API 기반 메일 발송"""
     if not SENDGRID_API_KEY:
-        st.error("⚠️ SENDGRID_API_KEY가 설정되어 있지 않습니다.")
+        _safe_st_error("⚠️ SENDGRID_API_KEY가 설정되어 있지 않습니다.")
         logger.error("SENDGRID_API_KEY missing")
         return False
 
@@ -165,26 +176,34 @@ def send_mail_sendgrid(
         encoded = base64.b64encode(attach_html.encode("utf-8")).decode()
         attachment = Attachment()
         attachment.file_content = FileContent(encoded)
-        attachment.file_type = FileType("text/html")
+        attachment.file_type = FileType("text/html; charset=utf-8")
         attachment.file_name = FileName(attach_name)
         attachment.disposition = Disposition("attachment")
-        message.attachment = attachment
+        message.add_attachment(attachment)
 
     try:
         sg = SendGridAPIClient(SENDGRID_API_KEY)
         response = sg.send(message)
+        logger.info(f"SendGrid 응답 코드: {response.status_code}")
+        logger.info(f"SendGrid 응답 본문: {getattr(response, 'body', None)}")
+
         if response.status_code in (200, 202):
-            logger.info(f"메일 발송 성공 → {subject}")
-            st.success("📨 메일이 성공적으로 발송되었습니다! (SendGrid)")
+            logger.info(f"📨 메일 발송 성공 → {subject}")
+            try:
+                st.success("📨 메일이 성공적으로 발송되었습니다! (SendGrid)")
+            except Exception:
+                pass
             return True
         else:
-            st.error(f"메일 발송 실패: {response.status_code}")
+            _safe_st_error(f"메일 발송 실패: {response.status_code}")
             logger.error(f"SendGrid 응답 코드: {response.status_code}")
             return False
     except Exception as e:
         logger.error(f"[ERROR] SendGrid send_mail 실패: {e}")
-        st.error(f"메일 발송 실패: {e}")
+        _safe_st_error(f"메일 발송 실패: {e}")
         return False
+
+
 
 # =======================================================
 # 간단한 인증코드 발송

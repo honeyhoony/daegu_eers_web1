@@ -12,3 +12,4 @@ typing-extensions
 extra-streamlit-components
 pg8000
 psycopg2-binary
+sendgrid==6.11.0

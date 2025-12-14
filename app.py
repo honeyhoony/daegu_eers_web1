@@ -45,7 +45,7 @@ from collect_data import (
     resolve_address_from_bjd, fetch_kapt_basic_info, fetch_kapt_maintenance_history,
     _as_text, _to_int as _to_int_collect, _extract_school_name, _assign_office_by_school_name
     )
-from mailer import send_mail, build_subject, build_body_html, build_attachment_html
+from mailer import send_mail_sendgrid, build_subject, build_body_html, build_attachment_html
 
 
 # =========================================================
@@ -85,12 +85,10 @@ if not SUPABASE_DATABASE_URL:
 # =========================================================
 # SMTP 설정
 # =========================================================
-MAIL_FROM       = _cfg("MAIL_FROM", "")
-MAIL_SMTP_HOST  = _cfg("MAIL_SMTP_HOST", "")
-MAIL_SMTP_PORT  = int(_cfg("MAIL_SMTP_PORT", 587))
-MAIL_USER       = _cfg("MAIL_USER", "")
-MAIL_PASS       = _cfg("MAIL_PASS", "")
+MAIL_FROM       = _cfg("MAIL_FROM", "daegu_eers@naver.com")
 MAIL_FROM_NAME  = _cfg("MAIL_FROM_NAME", "대구본부 EERS팀")
+SENDGRID_API_KEY = _cfg("SENDGRID_API_KEY", "")
+
 ADMIN_PASSWORD  = _cfg("ADMIN_PASSWORD", "admin")
 
 # 최소 동기화일
@@ -1950,28 +1948,36 @@ def mail_send_page():
         with st.spinner("메일 발송 중..."):
             for office, data in mpd.items():
                 try:
-                    # 💡 수정된 부분: mailer.py의 send_mail 함수가 
-                    # SMTP 설정값들을 인수로 받도록 변경되었다고 가정하고 추가합니다.
-                    send_mail(
-                        to_list=[r["email"] for r in data["to_list"]],
-                        subject=data["subject"],
-                        html_body=data["html_body"],
-                        attach_name=data["attach_name"],
-                        attach_html=data["attach_html"],
-                        # ---------------------------------------------
-                        # 🔥 추가된 인수
-                        mail_from=MAIL_FROM, 
-                        smtp_host=MAIL_SMTP_HOST, 
-                        smtp_port=MAIL_SMTP_PORT, 
-                        mail_user=MAIL_USER, 
-                        mail_pass=MAIL_PASS,
-                        # ---------------------------------------------
+                    # ✅ 1. 수신자 목록
+                    to_list = data["to_list"]
+
+                    # ✅ 2. 메일 제목 / 본문 / 첨부
+                    subject = build_subject(
+                        office=office,
+                        period=data["period"],
+                        count=len(data["items_period"])
                     )
+
+                    html_body, attach_name, attach_html, preview = build_body_html(
+                        office=office,
+                        period=data["period"],
+                        items_period=data["items_period"],
+                        items_annual=data["items_annual"]
+                    )
+
+                    # ✅ 3. SendGrid 발송
+                    send_mail_sendgrid(
+                        to_list=to_list,
+                        subject=subject,
+                        html_body=html_body,
+                        attach_name=attach_name,
+                        attach_html=attach_html,
+                    )
+
                     sent.append(office)
+
                 except Exception as e:
                     msg = str(e)
-
-                    # SMTP 사용자 친화적 메시지 변환
                     if "553" in msg:
                         msg = "수신자 이메일 주소가 올바르지 않습니다. 수신자 관리에서 확인해 주세요."
                     elif "535" in msg:
@@ -1980,6 +1986,7 @@ def mail_send_page():
                         msg = "메일 서버 연결이 지연되었습니다. 네트워크 상태를 확인하세요."
 
                     failed[office] = msg
+
         st.session_state["_do_final_send"] = False
         st.session_state.pop("mail_preview_data", None)
 
